@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Price Forecast 📈</title>
+    <link rel="stylesheet" href="styles/style.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .hidden { display: none; }
+        #chart-container { width: 100%; height: 500px; margin-top: 20px; }
+        #message { font-weight: bold; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Stock Forecast </h1>
+        <p>Predicting tomorrow's market movements today.</p>
+    </header>
+
+    <main>
+        <section id="input-form">
+            <h2>Get Your Forecast</h2>
+            <form id="forecastForm">
+                <div class="form-group">
+                    <label for="ticker">Stock Ticker Symbol (e.g., AAPL):</label>
+                    <input type="text" id="ticker" name="ticker" placeholder="Enter Ticker (e.g. RELIANCE.NS)" required>
+                </div>
+                <div class="form-group">
+                    <label for="days">Forecast Days:</label>
+                    <input type="number" id="days" name="days" placeholder="e.g., 7" min="1" max="30" required>
+                </div>
+                <button type="submit" id="submitBtn">Generate Forecast</button>
+            </form>
+            <p id="message"></p>
+        </section>
+
+        <hr>
+
+        <section id="results" class="hidden">
+            <h2>Forecast Results for <span id="result-ticker"></span></h2>
+            <div id="chart-container">
+                <div id="priceChart"></div>
+            </div>
+            <div id="summary">
+                <h3>Key Predictions:</h3>
+                <p>Latest Predicted Price: <strong>$<span id="predicted-price">--</span></strong></p>
+                <p>Prediction Horizon: <span id="prediction-horizon">--</span> days</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('forecastForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ticker = document.getElementById('ticker').value.toUpperCase();
+            const days = document.getElementById('days').value;
+            const messageEl = document.getElementById('message');
+            const resultsSec = document.getElementById('results');
+
+            messageEl.style.color = "blue";
+            messageEl.textContent = "Connecting to Backend... Please wait.";
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: ticker, days: parseInt(days) })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Ticker not found or Server Error');
+                }
+
+                const data = await response.json();
+                messageEl.textContent = "";
+                resultsSec.classList.remove('hidden');
+                
+                document.getElementById('result-ticker').textContent = data.ticker;
+                document.getElementById('prediction-horizon').textContent = days;
+                
+                const forecast = data.forecast_data;
+                const lastPredictedPrice = forecast[forecast.length - 1].Price;
+                document.getElementById('predicted-price').textContent = lastPredictedPrice.toFixed(2);
+
+                renderChart(data.historical_data, data.forecast_data, ticker);
+            } catch (error) {
+                console.error("Error:", error);
+                messageEl.style.color = "red";
+                messageEl.textContent = "Error: " + error.message;
+            }
+        });
+
+        function renderChart(historical, forecast, ticker) {
+            const histTrace = {
+                x: historical.map(d => d.Date),
+                y: historical.map(d => d.Close || d.Price),
+                type: 'scatter', mode: 'lines', name: 'Historical Price',
+                line: { color: '#17BECF' }
+            };
+
+            const foreTrace = {
+                x: forecast.map(d => d.Date),
+                y: forecast.map(d => d.Price),
+                type: 'scatter', mode: 'lines+markers', name: 'Forecasted Price',
+                line: { color: '#FF5733', dash: 'dot' }
+            };
+
+            const layout = {
+                title: `${ticker} Price Prediction`,
+                xaxis: { title: 'Date' },
+                yaxis: { title: 'Price' }
+            };
+            Plotly.newPlot('priceChart', [histTrace, foreTrace], layout);
+        }
+    </script>
+</body>
+</html>
